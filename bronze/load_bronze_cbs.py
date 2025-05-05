@@ -2,7 +2,7 @@ import json
 import datetime
 from pathlib import Path
 import pandas as pd
-import cbsodata as c
+import cbsodata as cbs
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from config import DATA_DIR, META_DIR
 
@@ -11,21 +11,22 @@ from functions.file_utils import create_directory, empty_directory
 from functions.df_utils import filter_dataframe, add_metadata_columns
 
 # === PARAMETERIZED CONFIG ===
-META_FILE = META_DIR / "bronze/cbs/bronze_cbs_tables.json"
-BASE_PATH = DATA_DIR
-OUTPUT_FORMAT = "parquet"  # parquet or "csv"
+meta_file = META_DIR / "bronze/cbs/bronze_cbs_tables.json"      # contains information about what tables to extract from CBS
+base_path = DATA_DIR                                            # where to store the data
+OUTPUT_FORMAT = "parquet"                                       # parquet or "csv"
 
+# === setup the logging ===
 logger = setup_logger()
 cleanup_old_logs()
 
 
-def process_table(table_info: dict, base_path: Path, file_format: str) -> None:
+def process_table(table_info: dict, data_path: Path, file_format: str) -> None:
     """
     Downloads, filters, adds metadata, and saves CBS data in the specified format.
 
     Args:
         table_info (dict): Contains table_name, filter_column, filter_value.
-        base_path (Path): Base directory to save files.
+        data_path (Path): Base directory to save files.
         file_format (str): 'parquet' or 'csv'.
     """
     try:
@@ -38,7 +39,7 @@ def process_table(table_info: dict, base_path: Path, file_format: str) -> None:
             return
 
         logger.info(f"Downloading: {table_name}")
-        table = c.get_data(table_name)
+        table = cbs.get_data(table_name)
         df = pd.DataFrame(table)
 
         if filter_column and filter_value:
@@ -54,7 +55,7 @@ def process_table(table_info: dict, base_path: Path, file_format: str) -> None:
 
         # File and path setup
         retrieval_date = datetime.date.today().strftime("%Y%m%d")
-        output_dir = base_path / 'bronze' / 'cbs' / table_name / retrieval_date
+        output_dir = data_path / 'bronze' / 'cbs' / table_name / retrieval_date
         create_directory(output_dir)
         empty_directory(output_dir)
 
@@ -73,18 +74,18 @@ def process_table(table_info: dict, base_path: Path, file_format: str) -> None:
         logger.info(f"Saved {len(df)} rows to {file_path}")
 
     except Exception as e:
-        logger.error(f"Error processing tempty_directoryable '{table_info}': {e}", exc_info=True)
+        logger.error(f"Error processing empty_directory  '{table_info}': {e}", exc_info=True)
 
 
 
-def download_cbs_tables_to_parquet(meta_file: str, output_base_path: Path,  output_filetype: str, max_threads: int = 4) -> None:
+def download_cbs_tables_to_parquet(meta_file_path: str, output_base_path: Path, output_filetype: str, max_threads: int = 4) -> None:
     try:
-        with open(meta_file, "r") as f:
+        with open(meta_file_path, "r") as f:
             data = json.load(f)
             tables_meta = data.get("tables", [])
 
             if not isinstance(tables_meta, list):
-                logger.error(f"'tables' should be a list in JSON file: {meta_file}")
+                logger.error(f"'tables' should be a list in JSON file: {meta_file_path}")
                 return
 
         logger.info(f"Processing {len(tables_meta)} tables using {max_threads} threads")
@@ -101,8 +102,8 @@ def download_cbs_tables_to_parquet(meta_file: str, output_base_path: Path,  outp
 # Execute python package
 if __name__ == "__main__":
     download_cbs_tables_to_parquet(
-        meta_file=META_FILE,
-        output_base_path=BASE_PATH,
+        meta_file_path=meta_file,
+        output_base_path=base_path,
         output_filetype=OUTPUT_FORMAT,
-        max_threads=8  # Adjust based on your system
+        max_threads=4  # Adjust based on your system
     )
